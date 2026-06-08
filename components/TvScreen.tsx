@@ -318,6 +318,12 @@ export default function TvScreen() {
         return;
       }
 
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setFullscreen((prev) => !prev);
+        return;
+      }
+
       if (e.key === "Escape" && fullscreen) {
         e.preventDefault();
         setFullscreen(false);
@@ -450,7 +456,7 @@ export default function TvScreen() {
                 pendingDigits={pendingDigit}
               />
 
-              {!fullscreen && guideOpen && (
+              {guideOpen && (
                 <TvGuide
                   channels={guideChannels}
                   currentChannel={selectedChannel}
@@ -484,11 +490,7 @@ export default function TvScreen() {
                 </div>
               )}
 
-              {!fullscreen && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-                  <span className="text-white/15 font-mono text-xs tracking-widest">&#x25B2;&#x25BC; change channel  &#xB7;  G guide</span>
-                </div>
-              )}
+
             </div>
 
             {!fullscreen && (
