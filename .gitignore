@@ -20,6 +20,9 @@
 # production
 /build
 
+# generated data
+/public/videos.json
+
 # misc
 .DS_Store
 *.pem

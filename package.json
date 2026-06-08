@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx tsx scripts/export-data.ts && next build",
+    "export-data": "npx tsx scripts/export-data.ts",
     "start": "next start",
     "lint": "eslint",
     "scrape": "npx tsx scripts/scrape.ts",
+    "scrape:best": "npx tsx scripts/best.ts",
     "db:push": "npx prisma db push",
     "db:generate": "npx prisma generate"
   },

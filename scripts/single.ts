@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db";
-import { fetchSubredditPosts } from "../lib/reddit";
+import { fetchComments, fetchSubredditPosts } from "../lib/reddit";
 
 const sub = process.argv[2];
 if (!sub) { console.error("Usage: npx tsx scripts/single.ts <subreddit>"); process.exit(1); }
@@ -7,11 +7,29 @@ if (!sub) { console.error("Usage: npx tsx scripts/single.ts <subreddit>"); proce
 async function main() {
   const posts = await fetchSubredditPosts(sub, 10000);
   let added = 0;
+  let skipped = 0;
+  let commentAdded = 0;
+  let commentSkipped = 0;
   for (const post of posts) {
     const existing = await prisma.video.findUnique({ where: { redditId: post.id } });
-    if (existing) continue;
+    if (existing) {
+      skipped++;
+      const comments = await fetchComments(post.subreddit, post.id);
+      for (const c of comments) {
+        const existingComment = await prisma.comment.findUnique({ where: { redditId: c.id } });
+        if (existingComment) { commentSkipped++; continue; }
+        await prisma.comment.create({
+          data: {
+            redditId: c.id, body: c.body, author: c.author,
+            score: c.score, createdAt: c.createdAt, videoId: existing.id,
+          },
+        });
+        commentAdded++;
+      }
+      continue;
+    }
     if (!post.videoUrl) continue;
-    await prisma.video.create({
+    const created = await prisma.video.create({
       data: {
         redditId: post.id, title: post.title, subreddit: post.subreddit,
         videoUrl: post.videoUrl, hlsUrl: post.hlsUrl, thumbnail: post.thumbnail,
@@ -21,9 +39,23 @@ async function main() {
       },
     });
     added++;
+    const comments = await fetchComments(post.subreddit, post.id);
+    for (const c of comments) {
+      const existingComment = await prisma.comment.findUnique({
+        where: { redditId: c.id },
+      });
+      if (existingComment) { commentSkipped++; continue; }
+      await prisma.comment.create({
+        data: {
+          redditId: c.id, body: c.body, author: c.author,
+          score: c.score, createdAt: c.createdAt, videoId: created.id,
+        },
+      });
+      commentAdded++;
+    }
   }
   const count = await prisma.video.count({ where: { subreddit: sub } });
-  console.log(`r/${sub}: added ${added}, total ${count}`);
+  console.log(`r/${sub}: +${added} videos, -${skipped} existing, comments: +${commentAdded} skipped ${commentSkipped}, total ${count}`);
 }
 
 main().then(() => process.exit(0)).catch(console.error);

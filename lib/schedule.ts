@@ -12,6 +12,7 @@ export interface VideoEntry {
   permalink: string;
   score: number;
   isGif: boolean;
+  isBest: boolean;
 }
 
 export interface TimelineEntry {

@@ -13,7 +13,9 @@ interface VideoPlayerProps {
   thumbnail: string | null;
   visible: boolean;
   muted: boolean;
+  volume?: number;
   onEnded?: () => void;
+  onPlaying?: () => void;
 }
 
 function isHlsUrl(src: string): boolean {
@@ -21,10 +23,11 @@ function isHlsUrl(src: string): boolean {
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
-  function VideoPlayer({ thumbnail, visible, muted, onEnded }, ref) {
+  function VideoPlayer({ thumbnail, visible, muted, volume = 1, onEnded, onPlaying }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const currentSrc = useRef("");
+
     function destroyHls() {
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -110,16 +113,31 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
     }, [visible, onEnded]);
 
     useEffect(() => {
+      const el = videoRef.current;
+      if (!el || !onPlaying) return;
+
+      const handler = () => onPlaying();
+      el.addEventListener("playing", handler);
+      return () => el.removeEventListener("playing", handler);
+    }, [onPlaying]);
+
+    useEffect(() => {
+      const el = videoRef.current;
+      if (!el) return;
+      el.volume = volume;
+    }, [volume]);
+
+    useEffect(() => {
       return () => destroyHls();
     }, []);
 
     return (
-      <div className="absolute inset-0" style={{ display: visible ? "block" : "none" }}>
+      <div className="absolute inset-0 pt-12" style={{ display: visible ? "block" : "none" }}>
         {thumbnail && (
           <img
             src={thumbnail}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover blur"
           />
         )}
         <video
@@ -127,7 +145,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           muted={muted}
           preload="auto"
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full"
+          style={{ objectFit: "fill" }}
           onError={() => {
             console.warn("Video failed to load:", currentSrc.current);
           }}

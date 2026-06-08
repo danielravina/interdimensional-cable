@@ -8,8 +8,8 @@ datasource db {
 }
 
 model Video {
-  id        String   @id @default(cuid())
-  redditId  String   @unique
+  id        String    @id @default(cuid())
+  redditId  String    @unique
   title     String
   subreddit String
   videoUrl  String
@@ -18,9 +18,22 @@ model Video {
   duration  Int?
   width     Int?
   height    Int?
-  author    String   @default("")
-  permalink String   @default("")
+  author    String    @default("")
+  permalink String    @default("")
+  score     Int       @default(0)
+  isGif     Boolean   @default(false)
+  isBest    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  comments  Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  redditId  String   @unique
+  body      String
+  author    String
   score     Int      @default(0)
-  isGif     Boolean  @default(false)
-  createdAt DateTime @default(now())
+  createdAt DateTime
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 }

@@ -7,6 +7,7 @@ import VhsTexture from "./VhsTexture";
 import ChannelOverlay from "./ChannelOverlay";
 import TvFrame from "./TvFrame";
 import TvGuide from "./TvGuide";
+import RemoteControl from "./RemoteControl";
 import {
   type VideoEntry,
   type ScheduleResult,
@@ -17,7 +18,8 @@ import {
 import { SUBREDDITS } from "@/lib/reddit";
 
 const NUM_CHANNELS = SUBREDDITS.length;
-const STATIC_DURATION = 300;
+const STATIC_MIN_DURATION = 150;
+const STATIC_SAFETY = 10_000;
 const SYNC_INTERVAL = 2000;
 
 function dateStringUTC(date: Date): string {
@@ -34,15 +36,21 @@ export default function TvScreen() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [staticActive, setStaticActive] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
   const [currentProgram, setCurrentProgram] = useState<CurrentProgram | null>(null);
   const [channelSchedules, setChannelSchedules] = useState<Map<number, ScheduleResult>>(new Map());
   const [lastBuildDate, setLastBuildDate] = useState("");
+  const [showVolumeOsd, setShowVolumeOsd] = useState(false);
 
   const playerRef = useRef<VideoPlayerHandle | null>(null);
-  const staticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentVideoId = useRef<string | null>(null);
   const initializedRef = useRef(false);
+  const staticStartTimeRef = useRef(0);
+  const volumeOsdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeMountedRef = useRef(false);
 
   const buildAllSchedules = useCallback(
     (vids: VideoEntry[]) => {
@@ -76,6 +84,20 @@ export default function TvScreen() {
     [],
   );
 
+  const handlePlaying = useCallback(() => {
+    if (staticStartTimeRef.current === 0) return;
+
+    const elapsed = Date.now() - staticStartTimeRef.current;
+    const remaining = Math.max(0, STATIC_MIN_DURATION - elapsed);
+
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    staticStartTimeRef.current = 0;
+
+    setTimeout(() => {
+      setStaticActive(false);
+    }, remaining);
+  }, []);
+
   const doTransition = useCallback(
     (channel: number, schedules: Map<number, ScheduleResult>, showStatic: boolean) => {
       setSelectedChannel(channel);
@@ -90,12 +112,14 @@ export default function TvScreen() {
       setCurrentProgram(program);
 
       if (showStatic) {
+        staticStartTimeRef.current = Date.now();
         setStaticActive(true);
-        if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
-        staticTimerRef.current = setTimeout(() => {
+        playProgram(program);
+
+        if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = setTimeout(() => {
           setStaticActive(false);
-          playProgram(program);
-        }, STATIC_DURATION);
+        }, STATIC_SAFETY);
       } else {
         playProgram(program);
       }
@@ -122,12 +146,14 @@ export default function TvScreen() {
 
       if (program.video.id !== currentVideoId.current) {
         setCurrentProgram(program);
+        staticStartTimeRef.current = Date.now();
         setStaticActive(true);
-        if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
-        staticTimerRef.current = setTimeout(() => {
+        playProgram(program);
+
+        if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+        safetyTimerRef.current = setTimeout(() => {
           setStaticActive(false);
-          playProgram(program);
-        }, STATIC_DURATION);
+        }, STATIC_SAFETY);
       } else {
         setCurrentProgram(program);
       }
@@ -158,18 +184,20 @@ export default function TvScreen() {
     };
 
     setCurrentProgram(nextProgram);
+    staticStartTimeRef.current = Date.now();
     setStaticActive(true);
-    if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
-    staticTimerRef.current = setTimeout(() => {
+    playProgram(nextProgram);
+
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    safetyTimerRef.current = setTimeout(() => {
       setStaticActive(false);
-      playProgram(nextProgram);
-    }, STATIC_DURATION);
+    }, STATIC_SAFETY);
   }, [selectedChannel, guideOpen, playProgram, channelSchedules]);
 
   const changeChannel = useCallback(
     (direction: 1 | -1) => {
       const next = (selectedChannel + direction + NUM_CHANNELS) % NUM_CHANNELS;
-      if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
       doTransition(next, channelSchedules, true);
     },
     [selectedChannel, channelSchedules, doTransition],
@@ -177,18 +205,28 @@ export default function TvScreen() {
 
   const selectChannel = useCallback(
     (ch: number) => {
-      if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
       doTransition(ch, channelSchedules, true);
       setGuideOpen(false);
     },
     [channelSchedules, doTransition],
   );
 
+  const handleNumberPress = useCallback(
+    (num: number) => {
+      const ch = num - 1;
+      if (ch >= 0 && ch < NUM_CHANNELS) {
+        selectChannel(ch);
+      }
+    },
+    [selectChannel],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
     fetch("/api/videos")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : fetch("/videos.json").then((r2) => r2.json())))
       .then((data: VideoEntry[]) => {
         if (cancelled) return;
         setVideos(data);
@@ -244,6 +282,12 @@ export default function TvScreen() {
         return;
       }
 
+      if (e.key === "Escape" && fullscreen) {
+        e.preventDefault();
+        setFullscreen(false);
+        return;
+      }
+
       if (guideOpen) return;
 
       if (e.key === "ArrowUp") {
@@ -256,13 +300,23 @@ export default function TvScreen() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [guideOpen, changeChannel]);
+  }, [guideOpen, changeChannel, fullscreen]);
 
   useEffect(() => {
     return () => {
-      if (staticTimerRef.current) clearTimeout(staticTimerRef.current);
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!volumeMountedRef.current) {
+      volumeMountedRef.current = true;
+      return;
+    }
+    setShowVolumeOsd(true);
+    if (volumeOsdTimeoutRef.current) clearTimeout(volumeOsdTimeoutRef.current);
+    volumeOsdTimeoutRef.current = setTimeout(() => setShowVolumeOsd(false), 2000);
+  }, [volume, muted]);
 
   if (!loaded) {
     return (
@@ -287,75 +341,126 @@ export default function TvScreen() {
 
   const guideChannels = Array.from({ length: NUM_CHANNELS }, (_, i) => {
     const s = channelSchedules.get(i);
-    const p = s ? getCurrentProgram(s, new Date()) : null;
     return {
       num: i + 1,
       subreddit: SUBREDDITS[i],
-      video: p?.video ?? null,
-      offset: p?.offsetSeconds ?? 0,
-      duration: p?.duration ?? 0,
-      thumbnail: p?.video.thumbnail ?? null,
+      timeline: s?.timeline ?? [],
+      totalDuration: s?.totalDuration ?? 0,
     };
   });
 
   return (
-    <TvFrame>
-      <div className="relative w-full h-full bg-black overflow-hidden">
-        <div className="absolute inset-0">
-          <VideoPlayer
-            ref={playerRef}
-            thumbnail={program?.video.thumbnail ?? null}
-            visible={!staticActive}
-            muted={muted}
-            onEnded={handleEnded}
+    <div
+      style={{ background: `url('/bg2.png') center/cover no-repeat` }}
+      className="min-h-screen flex flex-col items-center justify-center p-8 font-sans relative overflow-hidden"
+    >
+      {fullscreen ? (
+        <div className="fixed inset-0 z-50 bg-black overflow-hidden">
+          <div className="absolute inset-0">
+            <VideoPlayer
+              ref={playerRef}
+              thumbnail={program?.video.thumbnail ?? null}
+              visible={!staticActive}
+              muted={muted}
+              volume={volume}
+              onEnded={handleEnded}
+              onPlaying={handlePlaying}
+            />
+          </div>
+
+          <StaticNoise visible={staticActive} />
+
+          <VhsTexture />
+
+          <ChannelOverlay
+            channel={selectedChannel + 1}
+            visible={true}
+            subreddit={program?.video.subreddit}
           />
         </div>
+      ) : (
+        <div className="flex-1 w-full max-w-4xl flex justify-center z-10">
+          <TvFrame>
+            <div className="relative w-full h-full bg-black overflow-hidden">
+              <div className="absolute inset-0">
+                <VideoPlayer
+                  ref={playerRef}
+                  thumbnail={program?.video.thumbnail ?? null}
+                  visible={!staticActive}
+                  muted={muted}
+                  volume={volume}
+                  onEnded={handleEnded}
+                  onPlaying={handlePlaying}
+                />
+              </div>
 
-        <StaticNoise visible={staticActive} />
+              <StaticNoise visible={staticActive} />
 
-        <VhsTexture />
+              <VhsTexture />
 
-        <ChannelOverlay
-          channel={selectedChannel + 1}
-          visible={!guideOpen}
-          subreddit={program?.video.subreddit}
-          author={program?.video.author}
-          showTitle={program?.video.title}
-        />
+              <ChannelOverlay
+                channel={selectedChannel + 1}
+                visible={!guideOpen}
+                subreddit={program?.video.subreddit}
+              />
 
-        {guideOpen && (
-          <TvGuide
-            channels={guideChannels}
-            currentChannel={selectedChannel}
-            onSelect={selectChannel}
-            onClose={() => setGuideOpen(false)}
-          />
-        )}
+              {guideOpen && (
+                <TvGuide
+                  channels={guideChannels}
+                  currentChannel={selectedChannel}
+                  onSelect={selectChannel}
+                  onClose={() => setGuideOpen(false)}
+                />
+              )}
 
-        <button
-          onClick={() => setMuted((m) => !m)}
-          className="absolute bottom-10 right-16 z-30 text-white/50 hover:text-white/90 transition-colors"
-          aria-label={muted ? "Unmute" : "Mute"}
-        >
-          {muted ? (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <line x1="23" y1="9" x2="17" y2="15" />
-              <line x1="17" y1="9" x2="23" y2="15" />
-            </svg>
-          ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-            </svg>
-          )}
-        </button>
+              {showVolumeOsd && (
+                <div className="absolute bottom-12 left-12 z-30 font-mono drop-shadow-[0_0_8px_rgba(74,222,128,0.6)]">
+                  <div className="text-sm tracking-widest text-green-400/80 mb-1.5">VOLUME</div>
+                  <div className="flex gap-[3px]">
+                    {muted ? (
+                      <div className="text-base tracking-widest text-green-400/60">MUTE</div>
+                    ) : (
+                      Array.from({ length: 10 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-[6px] h-8 rounded-[2px]"
+                          style={{
+                            backgroundColor: i < Math.round(volume * 10) ? "#4ade80" : "#1a3a1a",
+                            boxShadow:
+                              i < Math.round(volume * 10)
+                                ? "0 0 8px rgba(74,222,128,0.6)"
+                                : "none",
+                          }}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
 
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <span className="text-white/15 font-mono text-xs tracking-widest">▲▼ change channel  ·  G guide</span>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                <span className="text-white/15 font-mono text-xs tracking-widest">▲▼ change channel  ·  G guide</span>
+              </div>
+            </div>
+          </TvFrame>
         </div>
-      </div>
-    </TvFrame>
+      )}
+
+      {!fullscreen && (
+        <div className="mt-8 lg:mt-0 lg:absolute lg:right-10 lg:bottom-10 z-20 self-center lg:self-auto pb-8 lg:pb-0">
+          <RemoteControl
+            onNumberPress={handleNumberPress}
+            onChannelUp={() => changeChannel(1)}
+            onChannelDown={() => changeChannel(-1)}
+            onVolumeUp={() => setVolume((v) => Math.min(1, v + 0.1))}
+            onVolumeDown={() => setVolume((v) => Math.max(0, v - 0.1))}
+            onMuteToggle={() => setMuted((m) => !m)}
+            onGuidePress={() => setGuideOpen((v) => !v)}
+            onEnterPress={() => setFullscreen((f) => !f)}
+            isMuted={muted}
+          />
+        </div>
+      )}
+    </div>
   );
 }
