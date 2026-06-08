@@ -2,7 +2,7 @@
 set -e
 
 echo "Building..."
-GITHUB_PAGES=true npm run build
+GITHUB_PAGES=true NEXT_PUBLIC_BASE_PATH=/interdimensional-cable npm run build
 
 echo "Deploying to gh-pages..."
 TEMP_DIR=$(mktemp -d)

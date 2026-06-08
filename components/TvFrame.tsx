@@ -1,3 +1,5 @@
+import { withBase } from "../lib/basePath";
+
 export default function TvFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative w-full max-w-[900px] flex items-center justify-center">
@@ -15,7 +17,7 @@ export default function TvFrame({ children }: { children: React.ReactNode }) {
         </div>
 
         <img
-          src="/tv-frame.png"
+          src={withBase("/tv-frame.png")}
           alt=""
           className="absolute inset-0 w-full h-full pointer-events-none select-none"
           style={{ objectFit: "contain", zIndex: 50, borderRadius: "12px", border: "2px solid #333" }}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { withBase } from "../lib/basePath";
 import VideoPlayer, { VideoPlayerHandle } from "./VideoPlayer";
 import StaticNoise from "./StaticNoise";
 import VhsTexture from "./VhsTexture";
@@ -254,8 +255,8 @@ export default function TvScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/api/videos")
-      .then((r) => (r.ok ? r.json() : fetch("/videos.json").then((r2) => r2.json())))
+    fetch(withBase("/api/videos"))
+      .then((r) => (r.ok ? r.json() : fetch(withBase("/videos.json")).then((r2) => r2.json())))
       .then((data: VideoEntry[]) => {
         if (cancelled) return;
         setVideos(data);
@@ -495,7 +496,7 @@ export default function TvScreen() {
 
             {!fullscreen && (
               <img
-                src="/tv-frame.png"
+                src={withBase("/tv-frame.png")}
                 alt=""
                 className="absolute inset-0 w-full h-full pointer-events-none select-none"
                 style={{
