@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db";
-import { fetchComments, fetchSubredditTopPosts, SUBREDDITS } from "../lib/reddit";
+import { fetchSubredditTopPosts, SUBREDDITS } from "../lib/reddit";
 
 async function scrape() {
   console.log("Resetting all isBest flags...");
@@ -28,10 +28,7 @@ async function scrape() {
         where: { redditId: post.id },
       });
 
-      let videoId: string;
-
       if (existing) {
-        videoId = existing.id;
         await prisma.video.update({
           where: { redditId: post.id },
           data: {
@@ -49,7 +46,7 @@ async function scrape() {
       } else {
         if (!post.videoUrl) continue;
 
-        const created = await prisma.video.create({
+        await prisma.video.create({
           data: {
             redditId: post.id,
             title: post.title,
@@ -68,32 +65,10 @@ async function scrape() {
             createdAt: post.createdAt,
           },
         });
-        videoId = created.id;
         added++;
       }
 
-      const comments = await fetchComments(post.subreddit, post.id);
-      let commentAdded = 0;
-      for (const c of comments) {
-        const existingComment = await prisma.comment.findUnique({
-          where: { redditId: c.id },
-        });
-        if (existingComment) continue;
-        await prisma.comment.create({
-          data: {
-            redditId: c.id,
-            body: c.body,
-            author: c.author,
-            score: c.score,
-            createdAt: c.createdAt,
-            videoId,
-          },
-        });
-        commentAdded++;
-      }
-      if (commentAdded > 0) {
-        console.log(`    +${commentAdded} comments for "${post.title.slice(0, 40)}"`);
-      }
+
     }
 
     console.log(`  ${posts.length} posts, added ${added}, updated ${updated}\n`);

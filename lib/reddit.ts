@@ -124,14 +124,6 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-export interface RedditComment {
-  id: string;
-  body: string;
-  author: string;
-  score: number;
-  createdAt: Date;
-}
-
 export async function fetchSubredditTopPosts(
   subreddit: string,
   limit = 10,
@@ -190,39 +182,6 @@ export async function fetchSubredditTopPosts(
     console.error(`  r/${subreddit} top: ${msg}`);
     return posts;
   }
-}
-
-export async function fetchComments(subreddit: string, postId: string): Promise<RedditComment[]> {
-  const token = await getAccessToken();
-  const url = `https://oauth.reddit.com/r/${subreddit}/comments/${postId}.json?limit=5&depth=0&raw_json=1`;
-
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "User-Agent": "interdimensional_cable/1.0",
-      Accept: "application/json",
-    },
-  });
-
-  if (!res.ok) return [];
-
-  const json = await res.json();
-  const commentListing = json[1];
-  if (!commentListing?.data?.children) return [];
-
-  const comments: RedditComment[] = [];
-  for (const c of commentListing.data.children) {
-    if (c.kind !== "t1") continue;
-    comments.push({
-      id: c.data.id,
-      body: c.data.body,
-      author: c.data.author,
-      score: c.data.score,
-      createdAt: new Date(c.data.created_utc * 1000),
-    });
-    if (comments.length >= 5) break;
-  }
-  return comments;
 }
 
 export async function fetchSubredditPosts(

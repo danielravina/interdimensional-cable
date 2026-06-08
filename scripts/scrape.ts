@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db";
-import { fetchComments, fetchSubredditPosts, SUBREDDITS } from "../lib/reddit";
+import { fetchSubredditPosts, SUBREDDITS } from "../lib/reddit";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -38,18 +38,12 @@ async function scrape() {
     let skipped = 0;
     let updated = 0;
 
-    let commentAdded = 0;
-    let commentSkipped = 0;
-
     for (const post of posts) {
       const existing = await prisma.video.findUnique({
         where: { redditId: post.id },
       });
 
-      let videoId: string;
-
       if (existing) {
-        videoId = existing.id;
         if (!existing.hlsUrl && post.hlsUrl) {
           await prisma.video.update({
             where: { redditId: post.id },
@@ -70,7 +64,7 @@ async function scrape() {
       } else {
         if (!post.videoUrl) continue;
 
-        const created = await prisma.video.create({
+        await prisma.video.create({
           data: {
             redditId: post.id,
             title: post.title,
@@ -88,35 +82,11 @@ async function scrape() {
             createdAt: post.createdAt,
           },
         });
-        videoId = created.id;
         added++;
-      }
-
-      const comments = await fetchComments(post.subreddit, post.id);
-      for (const c of comments) {
-        const existingComment = await prisma.comment.findUnique({
-          where: { redditId: c.id },
-        });
-        if (existingComment) {
-          commentSkipped++;
-          continue;
-        }
-        await prisma.comment.create({
-          data: {
-            redditId: c.id,
-            body: c.body,
-            author: c.author,
-            score: c.score,
-            createdAt: c.createdAt,
-            videoId,
-          },
-        });
-        commentAdded++;
       }
     }
 
-    console.log(`  ${posts.length} videos (${daysAgo}d back), added ${added}, updated ${updated}, skipped ${skipped}`);
-    console.log(`  comments: added ${commentAdded}, skipped ${commentSkipped}\n`);
+    console.log(`  ${posts.length} videos (${daysAgo}d back), added ${added}, updated ${updated}, skipped ${skipped}\n`);
   }
 
   const count = await prisma.video.count();
