@@ -32,6 +32,8 @@ export interface CurrentProgram {
 }
 
 const DEFAULT_DURATION = 60;
+const CYCLE_DAYS = 7;
+const CYCLE_EPOCH = new Date(Date.UTC(2026, 0, 1));
 
 function hashString(s: string): number {
   let hash = 0;
@@ -82,10 +84,18 @@ export function buildSchedule(videos: VideoEntry[], channelNum: number, date: Da
   const seed = `${dateString(date)}-channel-${channelNum}`;
   const shuffled = seededShuffle(videos, seed);
 
+  const dayDiff = Math.floor((date.getTime() - CYCLE_EPOCH.getTime()) / 86_400_000);
+  const dayOfCycle = ((dayDiff % CYCLE_DAYS) + CYCLE_DAYS) % CYCLE_DAYS;
+
+  const blockSize = Math.ceil(shuffled.length / CYCLE_DAYS);
+  const start = dayOfCycle * blockSize;
+  const end = Math.min(start + blockSize, shuffled.length);
+  const dayVideos = shuffled.slice(start, end);
+
   const timeline: TimelineEntry[] = [];
   let totalDuration = 0;
 
-  for (const video of shuffled) {
+  for (const video of dayVideos) {
     timeline.push({ video, startTime: totalDuration });
     totalDuration += video.duration ?? DEFAULT_DURATION;
   }
