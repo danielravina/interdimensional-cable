@@ -11,7 +11,8 @@
     "scrape": "npx tsx scripts/scrape.ts",
     "scrape:best": "npx tsx scripts/best.ts",
     "db:push": "npx prisma db push",
-    "db:generate": "npx prisma generate"
+    "db:generate": "npx prisma generate",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
