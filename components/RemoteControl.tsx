@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useCallback } from "react";
 
 interface RemoteControlProps {
   onNumberPress: (num: number) => void;
@@ -23,6 +23,45 @@ export default function RemoteControl({
   onEnterPress,
   isMuted,
 }: RemoteControlProps) {
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playClick = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+
+      const now = ctx.currentTime;
+      const duration = 0.04;
+
+      const osc = ctx.createOscillator();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(1400, now);
+      osc.frequency.exponentialRampToValueAtTime(600, now + duration);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch {
+      // audio not available
+    }
+  }, []);
+
+  const wrap = useCallback(
+    (fn: () => void) => () => {
+      playClick();
+      fn();
+    },
+    [playClick],
+  );
+
   // Ultra-realistic 90s brushed metal styling
   const brushedMetalStyle = {
     background: `
@@ -85,7 +124,7 @@ export default function RemoteControl({
               GUIDE
             </span>
             <button
-              onClick={onGuidePress}
+              onClick={wrap(onGuidePress)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Flashback / Guide"
             />
@@ -96,7 +135,7 @@ export default function RemoteControl({
               SLEEP
             </span>
             <button
-              onClick={() => {}}
+              onClick={wrap(() => {})}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Sleep Timer (Mock)"
             />
@@ -110,7 +149,7 @@ export default function RemoteControl({
               OFF-ON
             </span>
             <button
-              onClick={onMuteToggle} // Satisfying click that does mute toggle
+              onClick={wrap(onMuteToggle)} // Satisfying click that does mute toggle
               className="w-[40px] h-[26px] bg-[#ac2e2e] rounded-[5px] shadow-[0_2px_0_#5a1212,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.25),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#5a1212,_inset_1px_1px_1.5px_rgba(0,0,0,0.7)] active:bg-[#8d2121] transition-all flex items-center justify-center cursor-pointer"
               title="Power / Toggle Mute"
             />
@@ -120,7 +159,7 @@ export default function RemoteControl({
           {[1, 2, 3].map((num) => (
             <div key={num} className="relative flex items-center justify-center">
               <button
-                onClick={() => onNumberPress(num)}
+                onClick={wrap(() => onNumberPress(num))}
                 className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center font-sans font-extrabold text-[12px] text-gray-200 select-none cursor-pointer"
               >
                 <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">{num}</span>
@@ -132,7 +171,7 @@ export default function RemoteControl({
               CHANNEL
             </span>
             <button
-              onClick={onChannelUp}
+              onClick={wrap(onChannelUp)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Channel Up"
             >
@@ -146,7 +185,7 @@ export default function RemoteControl({
           {[4, 5, 6].map((num) => (
             <div key={num} className="relative flex items-center justify-center">
               <button
-                onClick={() => onNumberPress(num)}
+                onClick={wrap(() => onNumberPress(num))}
                 className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center font-sans font-extrabold text-[12px] text-gray-200 select-none cursor-pointer"
               >
                 <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">{num}</span>
@@ -155,7 +194,7 @@ export default function RemoteControl({
           ))}
           <div className="relative flex items-center justify-center">
             <button
-              onClick={onChannelDown}
+              onClick={wrap(onChannelDown)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Channel Down"
             >
@@ -169,7 +208,7 @@ export default function RemoteControl({
           {[7, 8, 9].map((num) => (
             <div key={num} className="relative flex items-center justify-center">
               <button
-                onClick={() => onNumberPress(num)}
+                onClick={wrap(() => onNumberPress(num))}
                 className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center font-sans font-extrabold text-[12px] text-gray-200 select-none cursor-pointer"
               >
                 <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">{num}</span>
@@ -181,7 +220,7 @@ export default function RemoteControl({
               VOLUME
             </span>
             <button
-              onClick={onVolumeUp}
+              onClick={wrap(onVolumeUp)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Volume Up"
             >
@@ -197,7 +236,7 @@ export default function RemoteControl({
               ENTER
             </span>
             <button
-              onClick={onEnterPress}
+              onClick={wrap(onEnterPress)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Enter / Fullscreen"
             />
@@ -205,7 +244,7 @@ export default function RemoteControl({
 
           <div className="relative flex items-center justify-center">
             <button
-              onClick={() => onNumberPress(0)}
+              onClick={wrap(() => onNumberPress(0))}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center font-sans font-extrabold text-[12px] text-gray-200 select-none cursor-pointer"
             >
               <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">0</span>
@@ -217,7 +256,7 @@ export default function RemoteControl({
               MUTE
             </span>
             <button
-              onClick={onMuteToggle}
+              onClick={wrap(onMuteToggle)}
               className={`w-[40px] h-[26px] rounded-[5px] transition-all flex items-center justify-center cursor-pointer ${
                 isMuted
                   ? "bg-[#ac2e2e] shadow-[0_2px_0_#5a1212,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.25),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#5a1212,_inset_1px_1px_1.5px_rgba(0,0,0,0.7)] active:bg-[#8d2121]"
@@ -229,7 +268,7 @@ export default function RemoteControl({
 
           <div className="relative flex items-center justify-center">
             <button
-              onClick={onVolumeDown}
+              onClick={wrap(onVolumeDown)}
               className="w-[40px] h-[26px] bg-[#222224] rounded-[5px] shadow-[0_2px_0_#0f0f10,_inset_1.5px_1.5px_1px_rgba(255,255,255,0.1),_inset_-1.5px_-1.5px_1.5px_rgba(0,0,0,0.5)] active:translate-y-[1px] active:shadow-[0_1px_0_#0f0f10,_inset_1px_1px_1.5px_rgba(0,0,0,0.6)] active:bg-[#18181a] transition-all flex items-center justify-center cursor-pointer"
               title="Volume Down"
             >

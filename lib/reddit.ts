@@ -12,8 +12,8 @@ export const SUBREDDITS = [
   "midjourney",
   "Seedance_AI",
   "veo3",
-  "CursedAI",
   "HiggsfieldAI",
+  "CursedAI",
 ];
 
 export interface RedditPost {

@@ -5,7 +5,6 @@ import VideoPlayer, { VideoPlayerHandle } from "./VideoPlayer";
 import StaticNoise from "./StaticNoise";
 import VhsTexture from "./VhsTexture";
 import ChannelOverlay from "./ChannelOverlay";
-import TvFrame from "./TvFrame";
 import TvGuide from "./TvGuide";
 import RemoteControl from "./RemoteControl";
 import {
@@ -398,39 +397,40 @@ export default function TvScreen() {
       style={{ background: `url('/bg2.png') center/cover no-repeat` }}
       className="min-h-screen flex flex-col items-center justify-center p-8 font-sans relative overflow-hidden"
     >
-      {fullscreen ? (
-        <div className="fixed inset-0 z-50 bg-black overflow-hidden">
-          <div className="absolute inset-0">
-            <VideoPlayer
-              ref={playerRef}
-              thumbnail={program?.video.thumbnail ?? null}
-              visible={!staticActive}
-              muted={muted}
-              volume={volume}
-              onEnded={handleEnded}
-              onPlaying={handlePlaying}
-            />
-          </div>
-
-          <StaticNoise visible={staticActive} />
-
-          <VhsTexture />
-
-          <ChannelOverlay
-            channel={selectedChannel + 1}
-            visible={true}
-            subreddit={program?.video.subreddit}
-            pendingDigits={pendingDigit}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 w-full max-w-4xl flex justify-center z-10">
-          <TvFrame>
-            <div className="relative w-full h-full bg-black overflow-hidden">
+      {/* Outer wrapper: in fullscreen becomes fixed, otherwise flex layout */}
+      <div
+        className={fullscreen ? "fixed inset-0 z-50" : "flex-1 w-full max-w-4xl flex justify-center z-10"}
+      >
+        <div
+          className={
+            fullscreen
+              ? "relative w-full h-full"
+              : "relative w-full max-w-[900px] flex items-center justify-center"
+          }
+        >
+          <div
+            className={fullscreen ? "w-full h-full" : "relative w-full"}
+            style={fullscreen ? {} : { aspectRatio: "1379/985" }}
+          >
+            <div
+              className="absolute bg-black overflow-hidden"
+              style={
+                fullscreen
+                  ? { inset: 0 }
+                  : {
+                      top: "5.7%",
+                      right: "4.7%",
+                      bottom: "4.5%",
+                      left: "3.4%",
+                      borderRadius: "12px",
+                    }
+              }
+            >
               <div className="absolute inset-0">
                 <VideoPlayer
                   ref={playerRef}
                   thumbnail={program?.video.thumbnail ?? null}
+                  fullscreen={fullscreen}
                   visible={!staticActive}
                   muted={muted}
                   volume={volume}
@@ -445,12 +445,12 @@ export default function TvScreen() {
 
               <ChannelOverlay
                 channel={selectedChannel + 1}
-                visible={!guideOpen}
+                visible={fullscreen ? true : !guideOpen}
                 subreddit={program?.video.subreddit}
                 pendingDigits={pendingDigit}
               />
 
-              {guideOpen && (
+              {!fullscreen && guideOpen && (
                 <TvGuide
                   channels={guideChannels}
                   currentChannel={selectedChannel}
@@ -459,7 +459,7 @@ export default function TvScreen() {
                 />
               )}
 
-              {showVolumeOsd && (
+              {showVolumeOsd && !fullscreen && (
                 <div className="absolute bottom-12 left-12 z-30 font-mono drop-shadow-[0_0_8px_rgba(74,222,128,0.6)]">
                   <div className="text-sm tracking-widest text-green-400/80 mb-1.5">VOLUME</div>
                   <div className="flex gap-[3px]">
@@ -484,13 +484,29 @@ export default function TvScreen() {
                 </div>
               )}
 
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-                <span className="text-white/15 font-mono text-xs tracking-widest">▲▼ change channel  ·  G guide</span>
-              </div>
+              {!fullscreen && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                  <span className="text-white/15 font-mono text-xs tracking-widest">&#x25B2;&#x25BC; change channel  &#xB7;  G guide</span>
+                </div>
+              )}
             </div>
-          </TvFrame>
+
+            {!fullscreen && (
+              <img
+                src="/tv-frame.png"
+                alt=""
+                className="absolute inset-0 w-full h-full pointer-events-none select-none"
+                style={{
+                  objectFit: "contain",
+                  zIndex: 50,
+                  borderRadius: "12px",
+                  border: "2px solid #333",
+                }}
+              />
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       {!fullscreen && (
         <div className="mt-8 lg:mt-0 lg:absolute lg:right-10 lg:bottom-10 z-20 self-center lg:self-auto pb-8 lg:pb-0">

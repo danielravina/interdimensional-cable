@@ -7,11 +7,13 @@ export interface VideoPlayerHandle {
   setSrc: (src: string) => void;
   loadSrc: (src: string) => void;
   play: (startTime: number) => void;
+  getCurrentTime: () => number;
 }
 
 interface VideoPlayerProps {
   thumbnail: string | null;
   visible: boolean;
+  fullscreen: boolean;
   muted: boolean;
   volume?: number;
   onEnded?: () => void;
@@ -23,7 +25,7 @@ function isHlsUrl(src: string): boolean {
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
-  function VideoPlayer({ thumbnail, visible, muted, volume = 1, onEnded, onPlaying }, ref) {
+  function VideoPlayer({ thumbnail, visible, fullscreen, muted, volume = 1, onEnded, onPlaying }, ref) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const currentSrc = useRef("");
@@ -88,6 +90,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           el.addEventListener("loadedmetadata", doPlay, { once: true });
         }
       },
+      getCurrentTime() {
+        return videoRef.current?.currentTime ?? 0;
+      },
     }));
 
     useEffect(() => {
@@ -146,7 +151,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           preload="auto"
           playsInline
           className="absolute inset-0 w-full h-full"
-          style={{ objectFit: "fill" }}
+          style={{ objectFit: fullscreen ? "contain" : "fill" }}
           onError={() => {
             console.warn("Video failed to load:", currentSrc.current);
           }}

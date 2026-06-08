@@ -29,8 +29,8 @@ const CHANNEL_COL_WIDTH = 72;
 const ROW_HEIGHT = 64;
 const TIME_HEADER_HEIGHT = 28;
 const TIME_LABEL_INTERVAL = 30;
-const DAY_SECONDS = 86400;
-const DAY_WIDTH = DAY_SECONDS * PX_PER_SECOND;
+const LOOKBACK_SECONDS = 120;
+const LOOKAHEAD_SECONDS = 600;
 
 function secondsSinceMidnight(date: Date): number {
   return (
@@ -41,41 +41,56 @@ function secondsSinceMidnight(date: Date): number {
   );
 }
 
-function formatTimeLabel(totalSeconds: number): string {
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
+const TZ_OFFSET_SECONDS = new Date().getTimezoneOffset() * 60;
+
+function formatTimeLabel(utcTotalSeconds: number): string {
+  let local = utcTotalSeconds - TZ_OFFSET_SECONDS;
+  local = ((local % 86400) + 86400) % 86400;
+  const h = Math.floor(local / 3600);
+  const m = Math.floor((local % 3600) / 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 function buildUnifiedTimeline(
   timeline: TimelineEntry[],
   totalDuration: number,
+  windowStart: number,
+  windowEnd: number,
 ): DisplayEntry[] {
   if (totalDuration === 0 || timeline.length === 0) return [];
 
   const entries: DisplayEntry[] = [];
   let cycles = 0;
 
-  while (true) {
-    let added = false;
+  outer: while (true) {
+    const cycleStart = cycles * totalDuration;
+    if (cycleStart >= windowEnd) break;
+
+    // Skip entire cycles that end before the window
+    if (cycleStart + totalDuration <= windowStart) {
+      cycles++;
+      continue;
+    }
+
     for (const entry of timeline) {
       const duration = entry.video.duration ?? 60;
-      const absStart = cycles * totalDuration + entry.startTime;
+      const absStart = cycleStart + entry.startTime;
 
-      if (absStart >= DAY_SECONDS) continue;
+      if (absStart >= windowEnd) break outer;
 
       const absEnd = absStart + duration;
-      const displayEnd = Math.min(absEnd, DAY_SECONDS);
+      if (absEnd <= windowStart) continue;
+
+      const visibleStart = Math.max(absStart, windowStart);
+      const visibleEnd = Math.min(absEnd, windowEnd);
 
       entries.push({
         title: entry.video.title,
         thumbnail: entry.video.thumbnail,
-        startPx: absStart * PX_PER_SECOND,
-        widthPx: Math.max((displayEnd - absStart) * PX_PER_SECOND, 4),
+        startPx: (visibleStart - windowStart) * PX_PER_SECOND,
+        widthPx: Math.max((visibleEnd - visibleStart) * PX_PER_SECOND, 4),
       });
-      added = true;
     }
-    if (!added) break;
     cycles++;
   }
 
@@ -107,27 +122,38 @@ export default function TvGuide({
     return () => clearInterval(id);
   }, []);
 
-  const nowPx = elapsed * PX_PER_SECOND;
+  const windowStart = elapsed - LOOKBACK_SECONDS;
+  const windowEnd = elapsed + LOOKAHEAD_SECONDS;
+  const windowSeconds = LOOKBACK_SECONDS + LOOKAHEAD_SECONDS;
+  const gridWidth = windowSeconds * PX_PER_SECOND;
+  const nowPx = LOOKBACK_SECONDS * PX_PER_SECOND;
 
   const channelDisplays = useMemo(
     () =>
       channels.map((ch) => ({
         ...ch,
-        displayTimeline: buildUnifiedTimeline(ch.timeline, ch.totalDuration),
+        displayTimeline: buildUnifiedTimeline(
+          ch.timeline,
+          ch.totalDuration,
+          windowStart,
+          windowEnd,
+        ),
       })),
-    [channels],
+    [channels, windowStart, windowEnd],
   );
 
   const timeLabels = useMemo(() => {
     const labels: { label: string; left: number }[] = [];
-    for (let t = 0; t <= DAY_SECONDS; t += TIME_LABEL_INTERVAL) {
+    const firstLabel =
+      Math.ceil(windowStart / TIME_LABEL_INTERVAL) * TIME_LABEL_INTERVAL;
+    for (let t = firstLabel; t <= windowEnd; t += TIME_LABEL_INTERVAL) {
       labels.push({
         label: formatTimeLabel(t),
-        left: t * PX_PER_SECOND,
+        left: (t - windowStart) * PX_PER_SECOND,
       });
     }
     return labels;
-  }, []);
+  }, [windowStart, windowEnd]);
 
   const handleChannelScroll = useCallback(() => {
     if (syncingScroll.current) return;
@@ -235,7 +261,6 @@ export default function TvGuide({
     >
       {/* Time header */}
       <div className="flex shrink-0" style={{ height: TIME_HEADER_HEIGHT }}>
-        {/* Corner spacer aligned with channel column */}
         <div
           className="shrink-0 border-b border-r border-green-700/40 bg-green-900/60 flex items-center justify-center"
           style={{ width: CHANNEL_COL_WIDTH }}
@@ -245,13 +270,12 @@ export default function TvGuide({
           </span>
         </div>
 
-        {/* Horizontally-scrollable time labels */}
         <div
           ref={timeHeaderRef}
           className="flex-1 overflow-hidden border-b border-green-700/40 bg-green-900/50"
           onScroll={handleTimeHeaderScroll}
         >
-          <div style={{ width: DAY_WIDTH, height: "100%", position: "relative" }}>
+          <div style={{ width: gridWidth, height: "100%", position: "relative" }}>
             {timeLabels.map((tl, i) => (
               <div
                 key={i}
@@ -300,7 +324,7 @@ export default function TvGuide({
           })}
         </div>
 
-        {/* Shared grid: scrolls both vertically (channels) and horizontally (time) */}
+        {/* Shared grid */}
         <div
           ref={gridRef}
           className="flex-1 overflow-auto scrollbar-none"
@@ -308,7 +332,7 @@ export default function TvGuide({
         >
           <div
             style={{
-              width: DAY_WIDTH,
+              width: gridWidth,
               height: channelDisplays.length * ROW_HEIGHT,
               position: "relative",
             }}
