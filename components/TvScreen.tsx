@@ -21,6 +21,7 @@ const NUM_CHANNELS = SUBREDDITS.length;
 const STATIC_MIN_DURATION = 150;
 const STATIC_SAFETY = 10_000;
 const SYNC_INTERVAL = 2000;
+const TWO_DIGIT_TIMEOUT = 2000;
 
 function dateStringUTC(date: Date): string {
   const y = date.getUTCFullYear();
@@ -42,6 +43,7 @@ export default function TvScreen() {
   const [channelSchedules, setChannelSchedules] = useState<Map<number, ScheduleResult>>(new Map());
   const [lastBuildDate, setLastBuildDate] = useState("");
   const [showVolumeOsd, setShowVolumeOsd] = useState(false);
+  const [pendingDigit, setPendingDigit] = useState<string | null>(null);
 
   const playerRef = useRef<VideoPlayerHandle | null>(null);
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,6 +53,8 @@ export default function TvScreen() {
   const staticStartTimeRef = useRef(0);
   const volumeOsdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const volumeMountedRef = useRef(false);
+  const pendingDigitRef = useRef<string | null>(null);
+  const pendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const buildAllSchedules = useCallback(
     (vids: VideoEntry[]) => {
@@ -62,7 +66,7 @@ export default function TvScreen() {
       const schedules = new Map<number, ScheduleResult>();
       for (let i = 0; i < NUM_CHANNELS; i++) {
         const sub = SUBREDDITS[i];
-        const channelVids = vids.filter((v) => v.subreddit.toLowerCase() === sub.toLowerCase());
+        const channelVids = i === 0 ? vids.filter((v) => v.isBest) : vids.filter((v) => v.subreddit.toLowerCase() === sub.toLowerCase());
         schedules.set(i, buildSchedule(channelVids, i, date));
       }
       return { schedules, dateStr };
@@ -198,6 +202,9 @@ export default function TvScreen() {
     (direction: 1 | -1) => {
       const next = (selectedChannel + direction + NUM_CHANNELS) % NUM_CHANNELS;
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+      pendingDigitRef.current = null;
+      setPendingDigit(null);
       doTransition(next, channelSchedules, true);
     },
     [selectedChannel, channelSchedules, doTransition],
@@ -206,20 +213,43 @@ export default function TvScreen() {
   const selectChannel = useCallback(
     (ch: number) => {
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+      pendingDigitRef.current = null;
+      setPendingDigit(null);
       doTransition(ch, channelSchedules, true);
       setGuideOpen(false);
     },
     [channelSchedules, doTransition],
   );
 
+  const selectChannelRef = useRef(selectChannel);
+  selectChannelRef.current = selectChannel;
+
   const handleNumberPress = useCallback(
     (num: number) => {
-      const ch = num - 1;
-      if (ch >= 0 && ch < NUM_CHANNELS) {
-        selectChannel(ch);
+      if (pendingDigitRef.current !== null) {
+        if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+        const channelStr = `${pendingDigitRef.current}${num}`;
+        pendingDigitRef.current = null;
+        setPendingDigit(null);
+        const ch = parseInt(channelStr, 10);
+        if (ch >= 1 && ch <= NUM_CHANNELS) {
+          selectChannelRef.current(ch - 1);
+        }
+      } else {
+        pendingDigitRef.current = String(num);
+        setPendingDigit(String(num));
+        pendingTimeoutRef.current = setTimeout(() => {
+          const ch = parseInt(pendingDigitRef.current!, 10);
+          pendingDigitRef.current = null;
+          setPendingDigit(null);
+          if (ch >= 1 && ch <= NUM_CHANNELS) {
+            selectChannelRef.current(ch - 1);
+          }
+        }, TWO_DIGIT_TIMEOUT);
       }
     },
-    [selectChannel],
+    [],
   );
 
   useEffect(() => {
@@ -288,6 +318,12 @@ export default function TvScreen() {
         return;
       }
 
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        handleNumberPress(parseInt(e.key, 10));
+        return;
+      }
+
       if (guideOpen) return;
 
       if (e.key === "ArrowUp") {
@@ -300,11 +336,12 @@ export default function TvScreen() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [guideOpen, changeChannel, fullscreen]);
+  }, [guideOpen, changeChannel, fullscreen, handleNumberPress]);
 
   useEffect(() => {
     return () => {
       if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
     };
   }, []);
 
@@ -376,6 +413,7 @@ export default function TvScreen() {
             channel={selectedChannel + 1}
             visible={true}
             subreddit={program?.video.subreddit}
+            pendingDigits={pendingDigit}
           />
         </div>
       ) : (
@@ -402,6 +440,7 @@ export default function TvScreen() {
                 channel={selectedChannel + 1}
                 visible={!guideOpen}
                 subreddit={program?.video.subreddit}
+                pendingDigits={pendingDigit}
               />
 
               {guideOpen && (
