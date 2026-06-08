@@ -5,7 +5,6 @@ export const SUBREDDITS = [
   "aislop",
   "SoraAi",
   "runwayml",
-  "StableDiffusion",
   "aivideos",
   "kling",
   "animatediff",
