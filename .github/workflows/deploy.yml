@@ -34,6 +34,7 @@ jobs:
         env:
           DATABASE_URL: "file:./dev.db"
           GITHUB_PAGES: "true"
+          NEXT_PUBLIC_BASE_PATH: "/interdimensional-cable"
 
       - uses: actions/upload-pages-artifact@v3
         with:
