@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db";
-import { fetchSubredditPosts, SUBREDDITS } from "../lib/reddit";
+import { fetchSubredditPosts, fetchSubredditTopPosts, SUBREDDITS } from "../lib/reddit";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -23,7 +23,20 @@ async function scrape() {
   for (const sub of SUBREDDITS) {
     console.log(`🔍 Fetching r/${sub}${since ? ` since ${since.toISOString().slice(0, 10)}` : ""}...`);
 
-    const posts = await fetchSubredditPosts(sub, 10000, since ?? undefined);
+    // fetch new posts
+    const newPosts = await fetchSubredditPosts(sub, 10000, since ?? undefined);
+
+    // also fetch top posts from the past year to reach further back
+    const topPosts = await fetchSubredditTopPosts(sub, 100);
+
+    // dedupe by redditId, prefer newPosts entry when both have it
+    const topMap = new Map(topPosts.map((p) => [p.id, p]));
+    for (const np of newPosts) {
+      topMap.set(np.id, np);
+    }
+    const posts = [...topMap.values()];
+    posts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
     if (posts.length === 0) {
       console.log(`  No video posts found\n`);
       continue;
