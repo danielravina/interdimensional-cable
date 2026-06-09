@@ -6,8 +6,8 @@
 # Interdimensional Cable
 
 A TV simulator that plays random AI-generated videos from Reddit, channel-surfing style. Inspired by *Rick and Morty*.
+<img width="1608" height="809" alt="Screenshot 2026-06-08 at 7 29 44 PM" src="https://github.com/user-attachments/assets/9c27c6c8-ae56-43e5-8dde-ab082a147a87" />
 
-<img width="1608" height="809" alt="Screenshot 2026-06-08 at 7 28 40 PM" src="https://github.com/user-attachments/assets/0dc76fa4-588c-43ba-b926-b32cb8e22cb1" />
 
 ## How it works
 
